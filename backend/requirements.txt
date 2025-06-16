@@ -1,0 +1,33 @@
+# Core dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+pydantic==2.5.0
+
+# Document processing
+python-docx==1.1.0
+pypdf==3.17.1
+
+# NLP and analysis - using compatible versions
+spacy==3.6.1
+# Download model: python -m spacy download en_core_web_sm
+
+# Web scraping
+requests==2.31.0
+beautifulsoup4==4.12.2
+trafilatura==1.6.4
+
+# Utilities
+python-dotenv==1.0.0
+loguru==0.7.2
+
+# Build and packaging
+nuitka==1.8.6
+
+# Development dependencies
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+black==23.11.0
+isort==5.12.0
+mypy==1.7.1

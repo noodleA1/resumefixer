@@ -1,0 +1,183 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test-backend:
+    name: Test Backend
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: [3.11, 3.12]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Download spaCy model
+      run: |
+        cd backend
+        python -m spacy download en_core_web_sm
+
+    - name: Run backend tests
+      run: |
+        cd backend
+        python test_build.py
+
+    - name: Test FastAPI server
+      run: |
+        cd backend
+        timeout 10s python src/main.py || true
+
+  test-build-environment:
+    name: Test Build Environment
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+
+    - name: Test environment setup (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        powershell -ExecutionPolicy Bypass -File scripts/setup.ps1 -SkipVenv
+
+    - name: Test environment setup (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        chmod +x scripts/setup.sh
+        ./scripts/setup.sh
+
+    - name: Validate project structure
+      run: |
+        python test_environment.py
+
+  lint-and-format:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+
+    - name: Install linting dependencies
+      run: |
+        cd backend
+        pip install black isort mypy
+
+    - name: Check code formatting with Black
+      run: |
+        cd backend
+        black --check --diff src/
+
+    - name: Check import sorting with isort
+      run: |
+        cd backend
+        isort --check-only --diff src/
+
+    - name: Type checking with mypy
+      run: |
+        cd backend
+        mypy src/ --ignore-missing-imports
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+
+    - name: Install security scanning tools
+      run: |
+        pip install bandit safety
+
+    - name: Run Bandit security scan
+      run: |
+        cd backend
+        bandit -r src/ -f json -o bandit-report.json || true
+
+    - name: Check for known security vulnerabilities
+      run: |
+        cd backend
+        safety check --json --output safety-report.json || true
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          backend/bandit-report.json
+          backend/safety-report.json
+
+  build-test:
+    name: Test Build Process
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    needs: [test-backend]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+
+    - name: Install build dependencies
+      run: |
+        cd backend
+        pip install -r requirements.txt
+
+    - name: Test Nuitka compilation (Hello World)
+      run: |
+        cd backend
+        python build_hello_world.py
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-test-${{ matrix.os }}
+        path: |
+          backend/hello_world_test*
+          backend/*.exe
